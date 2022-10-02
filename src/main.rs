@@ -3,12 +3,7 @@ use eframe::{
     egui::TopBottomPanel, run_native, App, NativeOptions,
 };
 use rfd::FileDialog;
-use std::{
-    collections::HashMap,
-    fs::{read},
-    path::PathBuf,
-};
-
+use std::{collections::HashMap, fs::read, path::{PathBuf, Path}, ops::Index};
 
 static APPNAME: &'static str = "RSDEDUPE";
 
@@ -41,20 +36,24 @@ impl RsDeDupe {
 
     fn render_header(&mut self, ctx: &Context) {
         TopBottomPanel::top("options_panel").show(ctx, |ui| {
-            ui.add_space(5.);
-            ui.heading("RSDEDUPE");
             ui.add_space(11.);
             eframe::egui::menu::bar(ui, |ui| {
                 ui.with_layout(
                     Layout::top_down(Align::Min).with_cross_align(Align::Min),
                     |ui| {
                         ui.add_space(2.);
-                        if ui.add(Button::new("🎯 Target Directory")).clicked() {
+                        if ui
+                            .add_sized([120., 40.], Button::new("🎯 Target Directory"))
+                            .clicked()
+                        {
                             self.get_dir(DirChoice::Src);
                         };
 
                         if ui
-                            .add(Button::new("❌ A place to put the dupelicates"))
+                            .add_sized(
+                                [120., 40.],
+                                Button::new("❌ A place to put the dupelicates"),
+                            )
                             .clicked()
                         {
                             self.get_dir(DirChoice::Backup);
@@ -62,6 +61,8 @@ impl RsDeDupe {
                     },
                 );
             });
+            ui.add_space(2.);
+            ui.add_space(11.);
         });
     }
 
@@ -79,9 +80,10 @@ impl RsDeDupe {
 
 impl App for RsDeDupe {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        CentralPanel::default().show(ctx, |_| {
-            self.render_header(ctx);
-            self.render_footer(ctx);
+        self.render_header(ctx);
+        self.render_footer(ctx);
+        CentralPanel::default().show(ctx, |ui| {
+            ui.label("Indexing");
         });
     }
 }
@@ -95,49 +97,77 @@ fn main() {
     );
 }
 
-struct FileMap {
-    map: HashMap<String, PathBuf>,
+// FileMap Stuff
+//-------------------------------------------------------------------------------------
+
+struct FileMap<'a> {
+    map: HashMap<String, &'a Path>,
     matches: i64,
-    file_vector: Vec<PathBuf>,
 }
 
-impl FileMap {
-    fn new(files: Vec<PathBuf>) -> Self {
+enum FileState {
+    Dupelicate,
+    Inserted,
+    Unknown
+}
+
+// struct IndexedFile {
+//     /// A File Digest
+//     hash: String,
+//     /// Where the digest came from
+//     path: PathBuf,
+// }
+
+impl FileMap<'_> {
+    fn new() -> Self {
         Self {
             map: HashMap::new(),
             matches: 0,
-            file_vector: files,
         }
     }
 
-    fn index_files(&self) {
-        for i in &self.file_vector {
-            let buf = i.to_path_buf();
-            let hash = self.hash_at_path(buf);
-            if let Some(hash) = hash {
-                self.maybe_insert_hash(hash.as_str());
+    // fn index_files(&self) {
+    //     for entry in &self.file_vector {
+    //         let hash = self.hash_at_path(entry.to_path_buf());
+
+    //         if let Some(hash) = hash {
+    //             self.maybe_insert_hash(hash.as_str());
+    //         }
+    //     }
+    // }
+
+    // digest a file at some path, then return the hash and path into a struct 
+    // I suppose we could fix the lifetime issue by moving the struct def outside of this
+    // function, but again... I am lazy- we are programmers right?
+    fn hash_at_path(&self, path: PathBuf) -> Result<String, std::io::Error> {
+        // we clone here because of a lifetime issue with IndexedFile
+        // I suppose we could fix that, however I am lazy
+        let _xpath = path.clone();
+        let bytes = read(_xpath);
+
+        match bytes {
+            Ok(v) => {
+                // TODO: Remove this unwrap()
+                let file_bytes = Some(v).unwrap();
+
+                // digest file bytes (32b each) and store in another struct for later
+                Ok(sha256::digest_bytes(&file_bytes))
+            }
+            // "bubble up, the io error"
+            Err(e) => Err(e)
+        }
+    }
+
+    // Here we figure out whether the hash already exists, if so we can later on move
+    // the file over to the dupelicates directory location specified by the user
+    fn is_duplicate(&mut self, hash: &str, file: &Path) -> FileState {
+        match self.map.contains_key(hash) {
+            true => FileState::Dupelicate,
+            false => {
+                self.map.insert(hash.to_string(), &file);
+                FileState::Inserted
             }
         }
-    }
-
-    // grab hash of a path
-    fn hash_at_path(&self, path: PathBuf) -> Option<String> {
-        let bytes = read(path);
-        match bytes {
-            Ok(v) => Some(sha256::digest_bytes(&v)),
-            Err(_) => None
-        }
-    }
-
-    // insert hash to the file map
-    fn maybe_insert_hash(&self, hash: &str) {
-        if self.map.contains_key(hash) {
-
-        }
-    }
-    // check for hash collisions
-    fn differs(&self) {
-        todo!()
     }
 }
 
@@ -145,7 +175,6 @@ fn dummy_func() {
     // initialize map with some files to roll through
     let mut paths: Vec<PathBuf> = Vec::new();
     if let Ok(i) = std::fs::read_dir("./dummy_dir") {
-
         for entry in i {
             match entry {
                 Ok(v) => paths.push(v.path()),
@@ -154,9 +183,19 @@ fn dummy_func() {
         }
     };
 
-    let map = FileMap::new(paths);
+    let mut map = FileMap::new();
 
-    map.index_files();
+    for entry in paths {
+        let hash = map.hash_at_path(entry);
+        match hash {
+            Ok(v) => {
+                map.is_duplicate(&v, &entry);
+            },
+            Err(_) => todo!()
+        }
+    }
+
+
 
     // pop file from stack
 }

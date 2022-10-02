@@ -1,51 +1,78 @@
-use std::fs::read;
-use std::path::PathBuf;
+mod hash {
 
-struct FileMap {
-    map: HashMap<String, PathBuf>,
-    matches: i64,
-    file_vector: Vec<PathBuf>,
-}
+    struct FileMap {
+        map: HashMap<String, PathBuf>,
+        file_vector: Vec<PathBuf>,
+        matches: i64,
+    }
 
-impl FileMap {
-    fn new(&self, files: Vec<DirEntry>) -> Self {
-        Self {
-            map: HashMap::new(),
-            matches: 0,
-            file_vector: Vec::new(),
+    struct IndexedFile {
+        hash: &str,
+        path: PathBuf,
+    }
+
+    impl FileMap {
+        fn new(files: Vec<PathBuf>) -> Self {
+            Self {
+                map: HashMap::new(),
+                matches: 0,
+                file_vector: files,
+            }
+        }
+
+        // fn index_files(&self) {
+        //     for entry in &self.file_vector {
+        //         let hash = self.hash_at_path(entry.to_path_buf());
+
+        //         if let Some(hash) = hash {
+        //             self.maybe_insert_hash(hash.as_str());
+        //         }
+        //     }
+        // }
+
+        // grab hash of a path
+        fn hash_at_path(&self, path: &PathBuf) -> Option<IndexedFile> {
+            let path = path.to_path_buf();
+            let bytes = read(path);
+
+            match bytes {
+                Ok(v) => {
+                    let file_bytes = Some(v);
+                    let hash = sha256::digest_bytes(&v);
+                    let i_file = Some(IndexedFile {hash, path});
+                    return i_file
+                },
+                Err(_) => None,
+            };
+        }
+
+        // Here we figure out whether the 
+        fn maybe_insert_hash(&self, hash: &str) {
+            if self.map.contains_key(hash) {}
+        }
+        // check for hash collisions
+        fn differs(&self) {
+            todo!()
         }
     }
 
-    fn index_files(&self) { 
-        for file in self.file_map.iter() {
-            let entry = file?;
-            let hash = hash_at_path(entry.path());
-        }
+    fn dummy_func() {
+        // initialize map with some files to roll through
+        let mut paths: Vec<PathBuf> = Vec::new();
+        if let Ok(i) = std::fs::read_dir("./dummy_dir") {
+            for entry in i {
+                match entry {
+                    Ok(v) => paths.push(v.path()),
+                    Err(_) => todo!(),
+                }
+            }
+        };
+
+        let map = FileMap::new(paths);
+
+        map.index_files();
+
+        // pop file from stack
     }
-
-    // grab hash of a path
-    fn hash_at_path(&self, path: PathBuf) {
-        let bytes: Vec<u8> = read(path).unwrap();
-        sha256::digest_bytes(&bytes);
-    }
-    // insert hash to the file map
-    fn maybe_insert_hash(&self) {
-        todo!()
-    }
-    // check for hash collisions
-    fn differs(&self) {
-        todo!()
-    }
-}
-
-fn dummy_func() {
-    // initialize map with some files to roll through
-    if let Ok(i) = std::fs::read_dir("./dummy_dir") { 
-        let map = FileMap::new(i);
-    };
-
-
-
-    // pop file from stack
 
 }
